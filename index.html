@@ -30,13 +30,14 @@
                 if (window.lucide) {
                     window.lucide.createIcons();
                 }
-            }, [name]);
+            }, [name, className]);
             return <i data-lucide={name} className={className}></i>;
         };
 
         const App = () => {
             const [currentView, setCurrentView] = useState('homeView');
             const [loading, setLoading] = useState(false);
+            const [historyLoading, setHistoryLoading] = useState(false);
             const [status, setStatus] = useState({ msg: '', type: '' });
             const [location, setLocation] = useState('กำลังระบุพิกัด...');
             const [imagePreview, setImagePreview] = useState(null);
@@ -74,23 +75,30 @@
             }, [historyData, filterName, filterDate]);
 
             const fetchHistory = async () => {
+                setHistoryLoading(true);
                 try {
                     const response = await fetch(WEB_APP_URL);
+                    if (!response.ok) throw new Error('Network response was not ok');
                     const data = await response.json();
                     setHistoryData(Array.isArray(data) ? data : []);
                 } catch (err) {
                     console.error("Fetch history failed", err);
+                    setStatus({ msg: 'ไม่สามารถดึงข้อมูลประวัติได้ กรุณาลองใหม่อีกครั้ง', type: 'error' });
+                } finally {
+                    setHistoryLoading(false);
                 }
             };
 
             const fetchLocation = () => {
-                setLocation('กำลังดึงพิกัด GPS...');
+                setLocation('กำลังค้นหาพิกัด GPS...');
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (pos) => setLocation(`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`),
-                        () => setLocation("ไม่สามารถระบุตำแหน่งได้"),
-                        { enableHighAccuracy: true }
+                        (err) => setLocation("ไม่สามารถระบุตำแหน่งได้ (โปรดอนุญาต GPS)"),
+                        { enableHighAccuracy: true, timeout: 5000 }
                     );
+                } else {
+                    setLocation("เบราว์เซอร์ไม่รองรับ GPS");
                 }
             };
 
@@ -126,6 +134,7 @@
                         setStatus({ msg: 'บันทึกสำเร็จเรียบร้อย!', type: 'success' });
                         e.target.reset();
                         setImagePreview(null);
+                        fetchHistory();
                         setTimeout(() => setCurrentView('homeView'), 2000);
                     } else { throw new Error(result.error); }
                 } catch (err) { setStatus({ msg: 'ผิดพลาด: ' + err.message, type: 'error' }); }
@@ -166,13 +175,15 @@
                                         <div className="bg-yellow-100 p-3 rounded-2xl mb-2 inline-block"><Icon name="check-circle" className="text-yellow-600 w-6 h-6" /></div>
                                         <p className="text-stone-400 text-[10px] font-bold uppercase tracking-widest">เช็คอินวันนี้</p>
                                         <p className="text-2xl font-bold text-stone-800">
-                                            {historyData.filter(i => (i['วันที่บันทึกระบบ'] || '').startsWith(new Date().toISOString().split('T')[0])).length} ราย
+                                            {historyLoading ? '...' : historyData.filter(i => (i['วันที่บันทึกระบบ'] || '').startsWith(new Date().toISOString().split('T')[0])).length} ราย
                                         </p>
                                     </div>
                                     <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-stone-100 text-center">
                                         <div className="bg-stone-50 p-3 rounded-2xl mb-2 inline-block"><Icon name="clock" className="text-stone-400 w-6 h-6" /></div>
                                         <p className="text-stone-400 text-[10px] font-bold uppercase tracking-widest">เวลาล่าสุด</p>
-                                        <p className="text-2xl font-bold text-stone-800">{historyData[0] ? (historyData[0]['วันที่บันทึกระบบ'] || '').split(' ')[1]?.substring(0, 5) : '--:--'}</p>
+                                        <p className="text-2xl font-bold text-stone-800">
+                                            {historyLoading ? '...' : (historyData[0] ? (historyData[0]['วันที่บันทึกระบบ'] || '').split(' ')[1]?.substring(0, 5) : '--:--')}
+                                        </p>
                                     </div>
                                 </div>
 
@@ -212,10 +223,23 @@
                                         <input type="tel" name="customerPhone" required placeholder="เบอร์โทรศัพท์ลูกค้า" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-[#FFC107] outline-none" />
                                         <input type="text" name="leadId" placeholder="Lead ID (LID)" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-[#FFC107] outline-none" />
                                     </div>
+                                    
+                                    {/* ส่วนพิกัดตำแหน่งที่เพิ่มปุ่มอัปเดต */}
                                     <div className="bg-yellow-50 p-5 rounded-2xl border border-yellow-100">
-                                        <p className="text-[10px] font-bold text-yellow-800 uppercase mb-1 tracking-widest">📍 พิกัดตำแหน่งปัจจุบัน</p>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <p className="text-[10px] font-bold text-yellow-800 uppercase tracking-widest">📍 พิกัดตำแหน่งปัจจุบัน</p>
+                                            <button 
+                                                type="button" 
+                                                onClick={fetchLocation}
+                                                className="bg-yellow-200 hover:bg-yellow-300 text-yellow-800 text-[10px] font-bold py-1 px-3 rounded-full transition-all flex items-center gap-1"
+                                            >
+                                                <Icon name="refresh-cw" className="w-3 h-3" />
+                                                อัปเดตพิกัด
+                                            </button>
+                                        </div>
                                         <p className="text-xs font-mono font-bold text-yellow-900 break-all">{location}</p>
                                     </div>
+
                                     <div className="space-y-3">
                                         {imagePreview ? (
                                             <div className="relative">
@@ -229,8 +253,8 @@
                                         )}
                                         <input id="camera" type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
                                     </div>
-                                    <button type="submit" disabled={loading} className="w-full bg-[#FFC107] text-black font-black py-5 rounded-[2rem] shadow-xl shadow-yellow-200 active:scale-95 transition-all">
-                                        {loading ? '⌛ กำลังส่งข้อมูล...' : '🚀 ส่งรายงานเช็คอิน'}
+                                    <button type="submit" disabled={loading} className="w-full bg-[#FFC107] text-black font-bold py-5 rounded-[2rem] shadow-xl shadow-yellow-200 active:scale-95 transition-all">
+                                        {loading ? '⌛ กำลังบันทึกข้อมูล...' : '🚀 ส่งรายงานเช็คอิน'}
                                     </button>
                                     {status.msg && <div className={`p-4 rounded-2xl text-center text-xs font-bold animate-pulse ${status.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{status.msg}</div>}
                                 </form>
@@ -239,10 +263,20 @@
 
                         {currentView === 'historyView' && (
                             <div className="space-y-4 animate-in">
-                                <div className="flex items-center gap-3 mb-2 px-1">
-                                    <button onClick={() => setCurrentView('homeView')} className="p-2.5 bg-white rounded-2xl shadow-sm"><Icon name="arrow-left" className="w-5 h-5 text-stone-600" /></button>
-                                    <h2 className="text-lg font-bold">ประวัติการทำงาน</h2>
+                                <div className="flex items-center justify-between gap-3 mb-2 px-1">
+                                    <div className="flex items-center gap-3">
+                                        <button onClick={() => setCurrentView('homeView')} className="p-2.5 bg-white rounded-2xl shadow-sm"><Icon name="arrow-left" className="w-5 h-5 text-stone-600" /></button>
+                                        <h2 className="text-lg font-bold">ประวัติการทำงาน</h2>
+                                    </div>
+                                    <button 
+                                        onClick={fetchHistory}
+                                        disabled={historyLoading}
+                                        className={`p-2.5 bg-white rounded-2xl shadow-sm text-stone-600 ${historyLoading ? 'opacity-50' : 'active:bg-stone-100'}`}
+                                    >
+                                        <Icon name="refresh-cw" className={`w-5 h-5 ${historyLoading ? 'animate-spin' : ''}`} />
+                                    </button>
                                 </div>
+
                                 <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-stone-100 space-y-4">
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1">
@@ -257,30 +291,39 @@
                                             <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-[#FFC107]" />
                                         </div>
                                     </div>
-                                    <button onClick={() => { setFilterName(''); setFilterDate(new Date().toISOString().split('T')[0]); }} className="w-full py-2.5 bg-stone-100 text-stone-500 rounded-2xl text-[10px] font-bold uppercase tracking-widest active:bg-stone-200 transition-all">รีเซ็ตวันนี้</button>
+                                    <button onClick={() => { setFilterName(''); setFilterDate(new Date().toISOString().split('T')[0]); fetchHistory(); }} className="w-full py-2.5 bg-stone-100 text-stone-500 rounded-2xl text-[10px] font-bold uppercase tracking-widest active:bg-stone-200 transition-all">รีเซ็ตวันนี้</button>
                                 </div>
+
                                 <div className="space-y-4 px-1 pb-10">
                                     <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tighter">พบรายการ {filteredHistory.length} รายการ</p>
-                                    {filteredHistory.length > 0 ? filteredHistory.map((item, idx) => (
-                                        <div key={idx} className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-stone-100 flex flex-col gap-4">
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 bg-yellow-100 text-yellow-700 rounded-2xl flex items-center justify-center font-black text-lg shadow-inner">{item['ชื่อพนักงานขาย']?.substring(0, 1)}</div>
-                                                    <div><p className="text-sm font-bold text-stone-900 leading-tight">{item['ชื่อร้านค้า']}</p><p className="text-[10px] text-stone-400 font-medium">{item['ชื่อพนักงานขาย']}</p></div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-xs font-bold text-yellow-600">{(item['วันที่บันทึกระบบ'] || '').split(' ')[1]?.substring(0, 5)} น.</p>
-                                                    <p className="text-[9px] text-stone-300 uppercase tracking-tighter">{(item['วันที่บันทึกระบบ'] || '').split(' ')[0]}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                {item['ลิงก์รูปภาพ'] && item['ลิงก์รูปภาพ'] !== "ไม่ได้แนบรูปภาพ" && (
-                                                    <a href={item['ลิงก์รูปภาพ']} target="_blank" className="flex-1 py-3 bg-blue-50 text-blue-700 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:bg-blue-100 shadow-sm"><Icon name="file-text" className="w-3.5 h-3.5" /> รูปภาพ</a>
-                                                )}
-                                                <a href={`https://www.google.com/maps/search/?api=1&query=${item['พิกัด GPS']}`} target="_blank" className="flex-1 py-3 bg-green-50 text-green-700 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:bg-green-100 shadow-sm"><Icon name="map-pin" className="w-3.5 h-3.5" /> แผนที่</a>
-                                            </div>
+                                    
+                                    {historyLoading ? (
+                                        <div className="text-center py-20">
+                                            <Icon name="refresh-cw" className="w-10 h-10 text-yellow-500 mx-auto mb-3 animate-spin" />
+                                            <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">กำลังดึงข้อมูล...</p>
                                         </div>
-                                    )) : (
+                                    ) : filteredHistory.length > 0 ? (
+                                        filteredHistory.map((item, idx) => (
+                                            <div key={idx} className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-stone-100 flex flex-col gap-4">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-yellow-100 text-yellow-700 rounded-2xl flex items-center justify-center font-black text-lg shadow-inner">{item['ชื่อพนักงานขาย']?.substring(0, 1)}</div>
+                                                        <div><p className="text-sm font-bold text-stone-900 leading-tight">{item['ชื่อร้านค้า']}</p><p className="text-[10px] text-stone-400 font-medium">{item['ชื่อพนักงานขาย']}</p></div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-xs font-bold text-yellow-600">{(item['วันที่บันทึกระบบ'] || '').split(' ')[1]?.substring(0, 5)} น.</p>
+                                                        <p className="text-[9px] text-stone-300 uppercase tracking-tighter">{(item['วันที่บันทึกระบบ'] || '').split(' ')[0]}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    {item['ลิงก์รูปภาพ'] && item['ลิงก์รูปภาพ'] !== "ไม่ได้แนบรูปภาพ" && (
+                                                        <a href={item['ลิงก์รูปภาพ']} target="_blank" className="flex-1 py-3 bg-blue-50 text-blue-700 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:bg-blue-100 shadow-sm"><Icon name="file-text" className="w-3.5 h-3.5" /> รูปภาพ</a>
+                                                    )}
+                                                    <a href={`https://www.google.com/maps/search/?api=1&query=${item['พิกัด GPS']}`} target="_blank" className="flex-1 py-3 bg-green-50 text-green-700 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:bg-green-100 shadow-sm"><Icon name="map-pin" className="w-3.5 h-3.5" /> แผนที่</a>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
                                         <div className="text-center py-20 bg-white/50 rounded-[3rem] border border-dashed border-stone-200">
                                             <Icon name="search" className="w-10 h-10 text-stone-200 mx-auto mb-3" />
                                             <p className="text-stone-300 text-xs font-bold uppercase tracking-widest">ไม่พบประวัติการทำงาน</p>

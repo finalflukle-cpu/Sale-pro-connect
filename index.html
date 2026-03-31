@@ -44,16 +44,21 @@
             const [historyData, setHistoryData] = useState([]);
             
             const [filterName, setFilterName] = useState('');
-            // ตั้งค่าวันที่ปัจจุบัน (2026-03-31)
+            // ตั้งค่าวันที่ปัจจุบัน (31 มีนาคม 2026 ตามรายงาน)
             const [filterDate, setFilterDate] = useState('2026-03-31');
 
             const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz6pxzMrB8kYpLtdyJlnMmw4Hegf3KhhGMLL-ataT4JfMZiYvGXYD37eQj9qhMWZjShTQ/exec";
             
-            // อัปเดตรายชื่อพนักงานขายให้ตรงตาม Google Sheet จริงในรูปภาพ
+            // 1. ปรับชื่อพนักงานขายเป็นตามเดิม (ชื่อ-นามสกุลเต็ม)
             const saleNames = [
-                "เยาวมาลย์ เกียรติ", "วลีพัชร นามวงศ์", "สุวิจักขณ์ มั่งคั่ง", 
-                "ชลชญา นิกรรัมย์", "โชติกา เจริญใจ", "วชิรญาณ์ ปานมณี", 
-                "คงชลัช ธนยารุ่งรวิน", "ปาณิศา หยองทอง"
+                "เยาวมาลย์ เกียรติเฉลิมพร", 
+                "วลีพัชร นามวงศ์", 
+                "สุวิจักขณ์ มั่งคั่ง", 
+                "ชลชญา นิกรรัมย์", 
+                "โชติกา เจริญใจ", 
+                "วชิรญาณ์ ปานมณี", 
+                "คงชลัช ธนยารุ่งรวิน", 
+                "ปาณิศา หยองทอง"
             ];
 
             useEffect(() => {
@@ -64,15 +69,19 @@
                 if (currentView === 'formView') fetchLocation();
             }, [currentView]);
 
-            // ระบบกรองข้อมูลที่แมตช์กับหัวตารางจริงใน Sheet
+            // 2. ระบบกรองข้อมูลจาก "วันที่บันทึก" และ "ชื่อพนักงานขาย"
             const filteredHistory = useMemo(() => {
                 if (!Array.isArray(historyData)) return [];
                 return historyData.filter(item => {
-                    // ใช้ชื่อคอลัมน์จากรูปภาพ: "ชื่อพนักงานขาย" และ "วันที่บันทึก"
+                    // ดึงค่าจากหัวตาราง "ชื่อพนักงานขาย" และ "วันที่บันทึก"
                     const nameInSheet = item["ชื่อพนักงานขาย"] || "";
                     const dateInSheet = item["วันที่บันทึก"] || ""; 
                     
-                    const matchName = filterName === '' || nameInSheet === filterName;
+                    // ตรวจสอบชื่อ (ถ้ามีการเลือก)
+                    // หมายเหตุ: หากใน Sheet ชื่อถูกตัดสั้น เราจะใช้ startsWith เพื่อความยืดหยุ่น
+                    const matchName = filterName === '' || nameInSheet.includes(filterName) || filterName.includes(nameInSheet);
+                    
+                    // ตรวจสอบวันที่ (กรองเฉพาะปี-เดือน-วัน)
                     const matchDate = filterDate === '' || dateInSheet.startsWith(filterDate);
                     
                     return matchName && matchDate;
@@ -339,9 +348,18 @@
 
                     {/* BOTTOM NAV */}
                     <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-white/90 backdrop-blur-xl border border-white/50 p-4 rounded-[2.5rem] shadow-2xl z-40 flex justify-around items-center">
-                        <button onClick={() => setCurrentView('homeView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'homeView' ? 'text-yellow-600 scale-110' : 'text-stone-300'}`}><Icon name="home" /><span className="text-[9px] font-bold">หน้าหลัก</span></button>
-                        <button onClick={() => setCurrentView('formView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'formView' ? 'text-yellow-600 scale-110' : 'text-stone-300'}`}><Icon name="map-pin" /><span className="text-[9px] font-bold">เช็คอิน</span></button>
-                        <button onClick={() => setCurrentView('historyView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'historyView' ? 'text-yellow-600 scale-110' : 'text-stone-300'}`}><Icon name="refresh-cw" /><span className="text-[9px] font-bold">ประวัติ</span></button>
+                        <button onClick={() => setCurrentView('homeView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'homeView' ? 'text-yellow-600 scale-110' : 'text-stone-300'}`}>
+                            <Icon name="home" />
+                            <span className="text-[9px] font-bold uppercase tracking-widest">หน้าหลัก</span>
+                        </button>
+                        <button onClick={() => setCurrentView('formView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'formView' ? 'text-yellow-600 scale-110' : 'text-stone-300'}`}>
+                            <Icon name="map-pin" />
+                            <span className="text-[9px] font-bold uppercase tracking-widest">เช็คอิน</span>
+                        </button>
+                        <button onClick={() => setCurrentView('historyView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'historyView' ? 'text-yellow-600 scale-110' : 'text-stone-300'}`}>
+                            <Icon name="refresh-cw" />
+                            <span className="text-[9px] font-bold uppercase tracking-widest">ประวัติ</span>
+                        </button>
                     </nav>
 
                     {/* LOADING OVERLAY */}

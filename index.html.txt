@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sale Check-in System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
+        
+        :root {
+            --mikado-yellow: #FFC107;
+            --mikado-dark: #FFA000;
+            --mikado-light: #FFECB3;
+        }
+
+        body {
+            font-family: 'Kanit', sans-serif;
+        }
+
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: var(--mikado-yellow);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .select-wrapper {
+            position: relative;
+        }
+
+        .select-wrapper::after {
+            content: '▼';
+            font-size: 0.8rem;
+            color: #9ca3af;
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        .view {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .bg-mikado { background-color: var(--mikado-yellow); }
+        .text-mikado { color: var(--mikado-yellow); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen pb-24">
+
+    <!-- Header -->
+    <header class="bg-mikado text-black p-5 shadow-lg sticky top-0 z-20 rounded-b-3xl border-b border-yellow-400">
+        <div class="max-w-md mx-auto flex items-center justify-between">
+            <div>
+                <p class="text-black/60 text-xs font-bold uppercase tracking-tighter">Sale Report System</p>
+                <h1 class="text-xl font-bold">Sale Pro Connect</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="bg-black/10 p-2 rounded-full">
+                    <i data-lucide="user" class="w-5 h-5 text-black"></i>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto p-4">
+
+        <!-- Home View -->
+        <section id="homeView" class="view active space-y-6">
+            <div class="bg-gradient-to-br from-[#FFC107] to-[#FF9800] p-6 rounded-3xl text-black shadow-xl relative overflow-hidden">
+                <div class="relative z-10">
+                    <h2 class="text-2xl font-bold mb-1">สวัสดีครับ!</h2>
+                    <p class="text-black/70 text-sm font-medium">เริ่มต้นวันใหม่ด้วยการบันทึกงานที่ยอดเยี่ยม</p>
+                    <button onclick="switchView('formView')" class="mt-4 bg-black text-white px-6 py-2 rounded-full font-bold shadow-md hover:bg-gray-800 transition active:scale-95">
+                        เริ่มเช็คอินเลย
+                    </button>
+                </div>
+                <i data-lucide="sun" class="absolute -right-4 -bottom-4 w-32 h-32 text-black/5"></i>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <div class="bg-yellow-100 w-10 h-10 rounded-full flex items-center justify-center mb-3">
+                        <i data-lucide="check-circle" class="text-yellow-700 w-6 h-6"></i>
+                    </div>
+                    <p class="text-gray-500 text-xs font-medium">วันนี้เช็คอินแล้ว</p>
+                    <p class="text-xl font-bold" id="todayCount">-- ราย</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <div class="bg-orange-100 w-10 h-10 rounded-full flex items-center justify-center mb-3">
+                        <i data-lucide="clock" class="text-orange-600 w-6 h-6"></i>
+                    </div>
+                    <p class="text-gray-500 text-xs font-medium">เวลางานล่าสุด</p>
+                    <p class="text-xl font-bold" id="lastTime">--:--</p>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <h3 class="text-gray-700 font-bold px-1">เมนูแนะนำ</h3>
+                <div onclick="switchView('formView')" class="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 active:bg-gray-50 transition cursor-pointer">
+                    <div class="bg-yellow-100 p-3 rounded-xl">
+                        <i data-lucide="file-text" class="text-yellow-700"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="font-bold">ส่งรายงานการพบลูกค้า</p>
+                        <p class="text-gray-400 text-xs">บันทึกข้อมูลพิกัดและรูปภาพ</p>
+                    </div>
+                    <i data-lucide="chevron-right" class="text-gray-300"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- Form View -->
+        <section id="formView" class="view space-y-5">
+            <div class="flex items-center gap-2 mb-4">
+                <button onclick="switchView('homeView')" class="p-2 bg-white rounded-full shadow-sm active:bg-gray-100">
+                    <i data-lucide="arrow-left" class="text-gray-600"></i>
+                </button>
+                <h2 class="text-lg font-bold text-gray-700">บันทึกข้อมูลการเช็คอิน</h2>
+            </div>
+
+            <form id="checkInForm" class="space-y-5 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <div class="space-y-4">
+                    <h2 class="text-gray-400 text-xs font-bold uppercase tracking-wider">ข้อมูลพนักงานขาย</h2>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">วันที่รายงาน</label>
+                        <input type="text" id="reportDate" readonly class="w-full p-3 bg-gray-100 border border-gray-200 rounded-xl text-gray-500 cursor-not-allowed outline-none font-medium">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อพนักงานขาย (Sale Name)</label>
+                        <div class="select-wrapper">
+                            <select id="saleName" required class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 outline-none transition-all appearance-none">
+                                <option value="" disabled selected>เลือกชื่อของคุณ</option>
+                                <option value="เยาวมาลย์ เกียรติเฉลิมพร">เยาวมาลย์ เกียรติเฉลิมพร</option>
+                                <option value="วลีพัชร นามวงศ์">วลีพัชร นามวงศ์</option>
+                                <option value="สุวิจักขณ์ มั่งคั่ง">สุวิจักขณ์ มั่งคั่ง</option>
+                                <option value="ชลชญา นิกรรัมย์">ชลชญา นิกรรัมย์</option>
+                                <option value="โชติกา เจริญใจ">โชติกา เจริญใจ</option>
+                                <option value="วชิรญาณ์ ปานมณี">วชิรญาณ์ ปานมณี</option>
+                                <option value="คงชลัช ธนยารุ่งรวิน">คงชลัช ธนยารุ่งรวิน</option>
+                                <option value="ปาณิศา หยองทอง">ปาณิศา หยองทอง</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="border-gray-100">
+
+                <div class="space-y-4">
+                    <h2 class="text-gray-400 text-xs font-bold uppercase tracking-wider">ข้อมูลลูกค้า</h2>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อร้านค้า</label>
+                        <input type="text" id="shopName" required class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 outline-none transition-all" placeholder="ชื่อร้านลูกค้า">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อลูกค้า</label>
+                        <input type="text" id="customerName" required class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 outline-none transition-all" placeholder="ชื่อ-นามสกุลลูกค้า">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">เบอร์โทรศัพท์ลูกค้า</label>
+                        <input type="tel" id="customerPhone" required class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 outline-none transition-all" placeholder="08x-xxx-xxxx">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Lead ID (LID) <span class="text-gray-400 text-xs font-normal">(ไม่บังคับ)</span></label>
+                        <input type="text" id="leadId" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500 outline-none transition-all" placeholder="ระบุ Lead ID (ถ้ามี)">
+                    </div>
+                </div>
+
+                <div class="bg-yellow-50 p-4 rounded-2xl border border-yellow-100">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-bold text-yellow-800 flex items-center gap-2">
+                            <i data-lucide="navigation" class="w-4 h-4"></i> พิกัดตำแหน่งปัจจุบัน
+                        </span>
+                        <button type="button" onclick="getLocation()" class="text-xs bg-yellow-600 text-white px-3 py-1 rounded-full hover:bg-yellow-700 transition shadow-sm font-medium">ดึงตำแหน่งใหม่</button>
+                    </div>
+                    <input type="text" id="location" readonly required class="w-full p-2 bg-transparent border-b border-yellow-200 text-yellow-900 text-sm outline-none font-mono" placeholder="กำลังระบุพิกัด...">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        <i data-lucide="camera" class="w-4 h-4 text-yellow-600"></i> ถ่ายรูป/แนบรูปภาพ
+                    </label>
+                    <div id="imagePreviewContainer" class="hidden mb-3">
+                        <img id="imagePreview" src="" class="w-full h-48 object-cover rounded-2xl border border-gray-200 shadow-inner">
+                    </div>
+                    <input type="file" id="imageFile" accept="image/*" class="hidden" onchange="previewImage(event)">
+                    <button type="button" onclick="document.getElementById('imageFile').click()" class="w-full py-8 border-2 border-dashed border-yellow-200 rounded-2xl text-yellow-700 bg-yellow-50/50 hover:bg-yellow-50 flex flex-col items-center gap-1 transition-all">
+                        <i data-lucide="image-plus" class="w-8 h-8 opacity-50 mb-1"></i>
+                        <span class="text-sm font-medium">กดที่นี่เพื่อถ่ายภาพ/แนบรูป</span>
+                    </button>
+                </div>
+
+                <button type="submit" id="submitBtn" class="w-full bg-mikado text-black font-bold py-4 rounded-2xl shadow-xl shadow-yellow-200 hover:bg-yellow-500 active:scale-95 transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="send" class="w-5 h-5"></i> บันทึกและส่งรายงาน
+                </button>
+            </form>
+            <div id="statusBox" class="hidden mt-4 p-4 rounded-2xl text-center font-medium"></div>
+        </section>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-white/90 backdrop-blur-md border border-gray-200 p-3 rounded-3xl shadow-2xl z-30 flex justify-around items-center">
+        <button onclick="switchView('homeView')" id="navHome" class="flex flex-col items-center gap-1 text-mikado">
+            <i data-lucide="home" class="w-6 h-6"></i>
+            <span class="text-[10px] font-bold">หน้าหลัก</span>
+        </button>
+        <button onclick="switchView('formView')" id="navForm" class="flex flex-col items-center gap-1 text-gray-400">
+            <i data-lucide="map-pin" class="w-6 h-6"></i>
+            <span class="text-[10px] font-bold">เช็คอิน</span>
+        </button>
+        <button onclick="window.location.reload()" class="flex flex-col items-center gap-1 text-gray-400">
+            <i data-lucide="refresh-cw" class="w-6 h-6"></i>
+            <span class="text-[10px] font-bold">รีเฟรช</span>
+        </button>
+    </nav>
+
+    <div id="loadingOverlay" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center flex-col gap-4 text-white">
+        <div class="loading-spinner"></div>
+        <p class="font-medium animate-pulse text-yellow-400">กำลังส่งข้อมูลพิกัดและรูปภาพ...</p>
+    </div>
+
+    <script>
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz8umzM2O8PhQHoBzuka7xdOlPZ9DuGeA0f-ZbA7COinmGELEaClHf62sBlch_6zF2ZRw/exec";
+
+        lucide.createIcons();
+
+        window.onload = () => {
+            setCurrentDate();
+            getLocation();
+        };
+
+        function switchView(viewId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+            const isHome = viewId === 'homeView';
+            document.getElementById('navHome').classList.toggle('text-mikado', isHome);
+            document.getElementById('navHome').classList.toggle('text-gray-400', !isHome);
+            document.getElementById('navForm').classList.toggle('text-mikado', !isHome);
+            document.getElementById('navForm').classList.toggle('text-gray-400', isHome);
+            if(viewId === 'formView') getLocation();
+            window.scrollTo(0, 0);
+        }
+
+        function setCurrentDate() {
+            const dateInput = document.getElementById('reportDate');
+            const now = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric' };
+            dateInput.value = now.toLocaleDateString('th-TH', options);
+        }
+
+        function getLocation() {
+            const locInput = document.getElementById('location');
+            locInput.value = "กำลังค้นหาสัญญาณ GPS...";
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => { locInput.value = `${position.coords.latitude}, ${position.coords.longitude}`; },
+                    (error) => { locInput.value = "ไม่สามารถระบุตำแหน่งได้"; },
+                    { enableHighAccuracy: true }
+                );
+            } else { locInput.value = "เบราว์เซอร์ไม่รองรับ GPS"; }
+        }
+
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById('imagePreview').src = e.target.result;
+                    document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        document.getElementById('checkInForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('hidden');
+            const imageFile = document.getElementById('imageFile').files[0];
+            let base64Image = "";
+            if (imageFile) base64Image = await convertToBase64(imageFile);
+            const payload = {
+                reportDate: document.getElementById('reportDate').value,
+                saleName: document.getElementById('saleName').value,
+                customerName: document.getElementById('customerName').value,
+                customerPhone: document.getElementById('customerPhone').value,
+                shopName: document.getElementById('shopName').value,
+                leadId: document.getElementById('leadId').value,
+                location: document.getElementById('location').value,
+                image: base64Image
+            };
+            try {
+                const response = await fetch(WEB_APP_URL, { method: 'POST', body: JSON.stringify(payload) });
+                const result = await response.json();
+                if (result.result === 'success') {
+                    showStatus("สำเร็จ! ข้อมูลถูกบันทึกลง Sheet แล้ว", "bg-green-100 text-green-800 border border-green-200");
+                    document.getElementById('checkInForm').reset();
+                    document.getElementById('imagePreviewContainer').classList.add('hidden');
+                    setCurrentDate();
+                    const now = new Date();
+                    document.getElementById('lastTime').innerText = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+                    setTimeout(() => switchView('homeView'), 2000);
+                } else { throw new Error(result.error); }
+            } catch (err) { showStatus("ผิดพลาด: " + err.message, "bg-red-100 text-red-800 border border-red-200"); }
+            finally { overlay.classList.add('hidden'); }
+        };
+
+        function convertToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        function showStatus(msg, classes) {
+            const box = document.getElementById('statusBox');
+            box.innerText = msg;
+            box.className = "mt-4 p-4 rounded-2xl text-center font-medium " + classes;
+            box.classList.remove('hidden');
+            setTimeout(() => box.classList.add('hidden'), 5000);
+        }
+    </script>
+</body>
+</html>

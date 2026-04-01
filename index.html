@@ -35,6 +35,14 @@
         };
 
         const App = () => {
+            // ฟังก์ชันช่วยดึงวันที่ปัจจุบันในรูปแบบ YYYY-MM-DD
+            const getTodayDate = () => {
+                const now = new Date();
+                const offset = now.getTimezoneOffset();
+                const localDate = new Date(now.getTime() - (offset * 60 * 1000));
+                return localDate.toISOString().split('T')[0];
+            };
+
             const [currentView, setCurrentView] = useState('homeView');
             const [loading, setLoading] = useState(false);
             const [historyLoading, setHistoryLoading] = useState(false);
@@ -44,12 +52,11 @@
             const [historyData, setHistoryData] = useState([]);
             
             const [filterName, setFilterName] = useState('');
-            // ตั้งค่าวันที่ปัจจุบัน (31 มีนาคม 2026 ตามรายงาน)
-            const [filterDate, setFilterDate] = useState('2026-03-31');
+            // 1. ตั้งค่าวันที่ปัจจุบัน Auto (แทนที่การ Hardcode 31 มีนาคม)
+            const [filterDate, setFilterDate] = useState(getTodayDate());
 
             const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz6pxzMrB8kYpLtdyJlnMmw4Hegf3KhhGMLL-ataT4JfMZiYvGXYD37eQj9qhMWZjShTQ/exec";
             
-            // 1. ปรับชื่อพนักงานขายเป็นตามเดิม (ชื่อ-นามสกุลเต็ม)
             const saleNames = [
                 "เยาวมาลย์ เกียรติเฉลิมพร", 
                 "วลีพัชร นามวงศ์", 
@@ -62,31 +69,46 @@
             ];
 
             useEffect(() => {
-                fetchHistory(); // โหลดครั้งแรกสำหรับหน้าโฮม
+                fetchHistory(); 
             }, []);
 
             useEffect(() => {
+                if (currentView === 'homeView') fetchHistory();
                 if (currentView === 'formView') fetchLocation();
             }, [currentView]);
 
-            // 2. ระบบกรองข้อมูลจาก "วันที่บันทึก" และ "ชื่อพนักงานขาย"
+            // ระบบกรองข้อมูลประวัติ
             const filteredHistory = useMemo(() => {
                 if (!Array.isArray(historyData)) return [];
                 return historyData.filter(item => {
-                    // ดึงค่าจากหัวตาราง "ชื่อพนักงานขาย" และ "วันที่บันทึก"
                     const nameInSheet = item["ชื่อพนักงานขาย"] || "";
                     const dateInSheet = item["วันที่บันทึก"] || ""; 
                     
-                    // ตรวจสอบชื่อ (ถ้ามีการเลือก)
-                    // หมายเหตุ: หากใน Sheet ชื่อถูกตัดสั้น เราจะใช้ startsWith เพื่อความยืดหยุ่น
                     const matchName = filterName === '' || nameInSheet.includes(filterName) || filterName.includes(nameInSheet);
-                    
-                    // ตรวจสอบวันที่ (กรองเฉพาะปี-เดือน-วัน)
                     const matchDate = filterDate === '' || dateInSheet.startsWith(filterDate);
                     
                     return matchName && matchDate;
                 });
             }, [historyData, filterName, filterDate]);
+
+            // หาข้อมูลล่าสุดเพื่อแสดง "เวลาล่าสุด" และ "จำนวนวันนี้"
+            const todayStats = useMemo(() => {
+                const todayStr = getTodayDate();
+                const todayItems = historyData.filter(i => (i['วันที่บันทึก'] || '').startsWith(todayStr));
+                
+                // หาเวลาล่าสุดจากข้อมูลทั้งหมด (ตัวบนสุดมักจะเป็นข้อมูลใหม่)
+                let lastTime = "--:--";
+                if (historyData.length > 0) {
+                    const latestRecord = historyData[0];
+                    const timePart = String(latestRecord['วันที่บันทึก'] || '').split(' ')[1];
+                    if (timePart) lastTime = timePart.substring(0, 5);
+                }
+
+                return {
+                    count: todayItems.length,
+                    lastTime: lastTime
+                };
+            }, [historyData]);
 
             const fetchHistory = async () => {
                 setHistoryLoading(true);
@@ -188,13 +210,13 @@
                                         <div className="bg-yellow-100 p-3 rounded-2xl mb-2 inline-block"><Icon name="check-circle" className="text-yellow-600 w-6 h-6" /></div>
                                         <p className="text-stone-400 text-[10px] font-bold uppercase">วันนี้</p>
                                         <p className="text-2xl font-bold text-stone-800 uppercase">
-                                            {historyLoading ? '...' : historyData.filter(i => (i['วันที่บันทึก'] || '').startsWith('2026-03-31')).length} ราย
+                                            {historyLoading ? '...' : todayStats.count} ราย
                                         </p>
                                     </div>
                                     <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-stone-100 text-center">
                                         <div className="bg-stone-50 p-3 rounded-2xl mb-2 inline-block"><Icon name="clock" className="text-stone-400 w-6 h-6" /></div>
                                         <p className="text-stone-400 text-[10px] font-bold uppercase">เวลาล่าสุด</p>
-                                        <p className="text-2xl font-bold text-stone-800">{historyData[0] ? (historyData[0]['วันที่บันทึก'] || '').split(' ')[1]?.substring(0, 5) : '--:--'}</p>
+                                        <p className="text-2xl font-bold text-stone-800">{historyLoading ? '...' : todayStats.lastTime}</p>
                                     </div>
                                 </div>
 
@@ -295,7 +317,7 @@
                                             ยืนยันการดึงข้อมูล
                                         </button>
                                         <button 
-                                            onClick={() => { setFilterName(''); setFilterDate('2026-03-31'); }} 
+                                            onClick={() => { setFilterName(''); setFilterDate(getTodayDate()); }} 
                                             className="w-full py-2.5 bg-stone-100 text-stone-400 rounded-2xl text-[10px] font-bold uppercase tracking-widest active:bg-stone-200 transition-all"
                                         >
                                             รีเซ็ตตัวกรอง

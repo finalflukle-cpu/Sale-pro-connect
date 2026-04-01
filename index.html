@@ -37,10 +37,11 @@
         const App = () => {
             // ฟังก์ชันช่วยดึงวันที่ปัจจุบันในรูปแบบ YYYY-MM-DD
             const getTodayDate = () => {
-                const now = new Date();
-                const offset = now.getTimezoneOffset();
-                const localDate = new Date(now.getTime() - (offset * 60 * 1000));
-                return localDate.toISOString().split('T')[0];
+                const d = new Date();
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
             };
 
             const [currentView, setCurrentView] = useState('homeView');
@@ -52,7 +53,7 @@
             const [historyData, setHistoryData] = useState([]);
             
             const [filterName, setFilterName] = useState('');
-            // 1. ตั้งค่าวันที่ปัจจุบัน Auto (แทนที่การ Hardcode 31 มีนาคม)
+            // ตั้งค่าวันที่ปัจจุบัน Auto ทุกครั้งที่เปิดแอป
             const [filterDate, setFilterDate] = useState(getTodayDate());
 
             const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz6pxzMrB8kYpLtdyJlnMmw4Hegf3KhhGMLL-ataT4JfMZiYvGXYD37eQj9qhMWZjShTQ/exec";
@@ -77,6 +78,19 @@
                 if (currentView === 'formView') fetchLocation();
             }, [currentView]);
 
+            // ฟังก์ชันตรวจสอบความตรงกันของวันที่ (รองรับหลาย Format)
+            const dateMatches = (dateInSheet, filterDateStr) => {
+                if (!dateInSheet || !filterDateStr) return false;
+                const dateStr = String(dateInSheet);
+                // แบบที่ 1: 2026-04-01 (ISO)
+                if (dateStr.startsWith(filterDateStr)) return true;
+                // แบบที่ 2: 4/1/2026 (American/Sheets Default)
+                const [y, m, d] = filterDateStr.split('-');
+                const americanFormat = `${parseInt(m)}/${parseInt(d)}/${y}`;
+                if (dateStr.startsWith(americanFormat)) return true;
+                return false;
+            };
+
             // ระบบกรองข้อมูลประวัติ
             const filteredHistory = useMemo(() => {
                 if (!Array.isArray(historyData)) return [];
@@ -85,28 +99,28 @@
                     const dateInSheet = item["วันที่บันทึก"] || ""; 
                     
                     const matchName = filterName === '' || nameInSheet.includes(filterName) || filterName.includes(nameInSheet);
-                    const matchDate = filterDate === '' || dateInSheet.startsWith(filterDate);
+                    const matchDate = filterDate === '' || dateMatches(dateInSheet, filterDate);
                     
                     return matchName && matchDate;
                 });
             }, [historyData, filterName, filterDate]);
 
-            // หาข้อมูลล่าสุดเพื่อแสดง "เวลาล่าสุด" และ "จำนวนวันนี้"
-            const todayStats = useMemo(() => {
+            // คำนวณสถิติหน้าหลัก (วันนี้ และ เวลาล่าสุด)
+            const stats = useMemo(() => {
                 const todayStr = getTodayDate();
-                const todayItems = historyData.filter(i => (i['วันที่บันทึก'] || '').startsWith(todayStr));
+                const todayItems = historyData.filter(i => dateMatches(i['วันที่บันทึก'], todayStr));
                 
-                // หาเวลาล่าสุดจากข้อมูลทั้งหมด (ตัวบนสุดมักจะเป็นข้อมูลใหม่)
-                let lastTime = "--:--";
+                let lastCheckInTime = "--:--";
                 if (historyData.length > 0) {
-                    const latestRecord = historyData[0];
-                    const timePart = String(latestRecord['วันที่บันทึก'] || '').split(' ')[1];
-                    if (timePart) lastTime = timePart.substring(0, 5);
+                    // กรองเอาเฉพาะรายการที่ "วันที่บันทึก" มีข้อมูล และแสดงตัวบนสุด (ซึ่งปกติคือล่าสุด)
+                    const latest = historyData[0];
+                    const timeStr = String(latest['วันที่บันทึก'] || '').split(' ')[1];
+                    if (timeStr) lastCheckInTime = timeStr.substring(0, 5);
                 }
 
                 return {
                     count: todayItems.length,
-                    lastTime: lastTime
+                    time: lastCheckInTime
                 };
             }, [historyData]);
 
@@ -208,15 +222,15 @@
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-stone-100 text-center">
                                         <div className="bg-yellow-100 p-3 rounded-2xl mb-2 inline-block"><Icon name="check-circle" className="text-yellow-600 w-6 h-6" /></div>
-                                        <p className="text-stone-400 text-[10px] font-bold uppercase">วันนี้</p>
+                                        <p className="text-stone-400 text-[10px] font-bold uppercase">เช็คอินวันนี้</p>
                                         <p className="text-2xl font-bold text-stone-800 uppercase">
-                                            {historyLoading ? '...' : todayStats.count} ราย
+                                            {historyLoading ? '...' : stats.count} ราย
                                         </p>
                                     </div>
                                     <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-stone-100 text-center">
-                                        <div className="bg-stone-50 p-3 rounded-2xl mb-2 inline-block"><Icon name="clock" className="text-stone-400 w-6 h-6" /></div>
+                                        <div className="bg-orange-100 p-3 rounded-2xl mb-2 inline-block"><Icon name="clock" className="text-orange-600 w-6 h-6" /></div>
                                         <p className="text-stone-400 text-[10px] font-bold uppercase">เวลาล่าสุด</p>
-                                        <p className="text-2xl font-bold text-stone-800">{historyLoading ? '...' : todayStats.lastTime}</p>
+                                        <p className="text-2xl font-bold text-stone-800">{historyLoading ? '...' : stats.time}</p>
                                     </div>
                                 </div>
 

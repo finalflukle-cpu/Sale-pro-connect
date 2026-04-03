@@ -33,21 +33,27 @@
         };
 
         const App = () => {
-            // --- 1. ฟังก์ชันดึงเวลาที่แก้ปัญหา Timezone (UTC -> Local) ---
+            // --- 1. ฟังก์ชันดึงเวลาที่แม่นยำด้วยการล็อค Timezone โซนประเทศไทย (Bangkok) ---
             const getValidTime = (item) => {
                 const dKey = Object.keys(item).find(k => k.includes('วันที่บันทึก') || k.includes('Timestamp'));
                 if (!dKey || !item[dKey]) return "--:--";
                 
-                const val = String(item[dKey]);
+                let val = String(item[dKey]);
 
-                // กรณีที่ 1: ข้อมูลส่งมาเป็นเวลาสากล (UTC) เช่น "2026-04-03T08:42:00.000Z"
-                // จะทำการแปลงกลับเป็นเวลาท้องถิ่นอัตโนมัติ (เช่น 15:42)
-                if (val.includes('T') && val.endsWith('Z')) {
+                // ตรวจสอบรูปแบบ ISO String (มี 'T') เพื่อนำมาแปลงโซนเวลาโดยเฉพาะ
+                if (val.includes('T')) {
+                    // หากไม่มีการระบุโซน ให้บังคับเป็น UTC (Z) เพื่อป้องกันเบราว์เซอร์แปลงผิด
+                    if (!val.endsWith('Z') && !val.includes('+')) val += 'Z';
+                    
                     const dateObj = new Date(val);
                     if (!isNaN(dateObj.getTime())) {
-                        const h = String(dateObj.getHours()).padStart(2, '0');
-                        const m = String(dateObj.getMinutes()).padStart(2, '0');
-                        return `${h}:${m}`;
+                        // บังคับให้แสดงผลใน Timezone ประเทศไทยเสมอ
+                        return dateObj.toLocaleTimeString('en-US', {
+                            timeZone: 'Asia/Bangkok',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false
+                        });
                     }
                 }
 
@@ -65,18 +71,24 @@
                 const dKey = Object.keys(item).find(k => k.includes('วันที่บันทึก') || k.includes('Timestamp'));
                 if (!dKey || !item[dKey]) return "";
                 
-                const val = String(item[dKey]);
+                let val = String(item[dKey]);
 
-                // ถ้าเป็น UTC format ให้แปลงเป็นเวลาไทย
-                if (val.includes('T') && val.endsWith('Z')) {
+                // ถ้าเป็น ISO format ให้แปลงเป็นวันที่โซนไทย
+                if (val.includes('T')) {
+                    if (!val.endsWith('Z') && !val.includes('+')) val += 'Z';
                     const d = new Date(val);
                     if (!isNaN(d.getTime())) {
-                        return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear() + 543}`;
+                        const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: 'numeric', day: 'numeric' });
+                        const parts = formatter.formatToParts(d);
+                        const day = parts.find(p => p.type === 'day').value;
+                        const month = parts.find(p => p.type === 'month').value;
+                        const year = parseInt(parts.find(p => p.type === 'year').value) + 543;
+                        return `${day}/${month}/${year}`;
                     }
                 }
                 
-                const datePart = val.split(/[ T]/)[0];
-                const parts = datePart.split(/[-\/]/);
+                const datePart = val.split(/[ T]/)[0]; // เอาเฉพาะส่วนวันที่
+                const parts = datePart.split(/[-\/]/); // แยกด้วยขีดหรือทับ
                 
                 if (parts.length === 3) {
                     if (parseInt(parts[0]) > 2500) return `${parseInt(parts[2])}/${parseInt(parts[1])}/${parts[0]}`;
@@ -122,18 +134,24 @@
                 if (currentView === 'formView') fetchLocation();
             }, [currentView]);
 
-            // ระบบตรวจสอบวันที่ให้ตรงกับข้อมูลใน Sheet แบบยืดหยุ่นและรองรับ UTC
+            // ระบบตรวจสอบวันที่ให้ตรงกับข้อมูลใน Sheet ด้วยการล็อค Timezone เป็นประเทศไทย
             const checkDateMatch = (item, targetDateStr) => {
                 const dKey = Object.keys(item).find(k => k.includes('วันที่บันทึก') || k.includes('Timestamp'));
                 if (!dKey || !item[dKey]) return false;
                 
-                const val = String(item[dKey]);
+                let val = String(item[dKey]);
 
-                // ถ้าเป็น UTC string ให้แปลงเป็น Local timezone แล้วเทียบ
-                if (val.includes('T') && val.endsWith('Z')) {
+                // แปลงเวลาให้เป็น Local Timezone ก่อนเช็ค
+                if (val.includes('T')) {
+                    if (!val.endsWith('Z') && !val.includes('+')) val += 'Z';
                     const d = new Date(val);
                     if (!isNaN(d.getTime())) {
-                        const localIso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                        const formatter = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' });
+                        const parts = formatter.formatToParts(d);
+                        const y = parts.find(p => p.type === 'year').value;
+                        const m = parts.find(p => p.type === 'month').value;
+                        const day = parts.find(p => p.type === 'day').value;
+                        const localIso = `${y}-${m}-${day}`;
                         return localIso === targetDateStr;
                     }
                 }

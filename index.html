@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sale Pro Connect - Super Coconut</title>
-    <!-- โหลด Library ที่จำเป็น -->
+    <!-- โหลด Library ที่จำเป็นจาก CDN -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -33,26 +33,67 @@
         };
 
         const App = () => {
-            // --- ฟังก์ชันดึงเวลาที่ถูกต้อง (ดึง HH:mm จาก String โดยตรงเพื่อความแม่นยำ) ---
-            const formatTimeLocal = (dateStr) => {
-                if (!dateStr) return "--:--";
-                // ค้นหารูปแบบ 00:00 ภายในข้อความ เพื่อหลีกเลี่ยงปัญหา Date Object และ Timezone
-                const match = String(dateStr).match(/(\d{1,2}:\d{2})/);
-                return match ? match[1] : "--:--";
+            // --- 1. ฟังก์ชันดึงเวลาที่แก้ปัญหา Timezone (UTC -> Local) ---
+            const getValidTime = (item) => {
+                const dKey = Object.keys(item).find(k => k.includes('วันที่บันทึก') || k.includes('Timestamp'));
+                if (!dKey || !item[dKey]) return "--:--";
+                
+                const val = String(item[dKey]);
+
+                // กรณีที่ 1: ข้อมูลส่งมาเป็นเวลาสากล (UTC) เช่น "2026-04-03T08:42:00.000Z"
+                // จะทำการแปลงกลับเป็นเวลาท้องถิ่นอัตโนมัติ (เช่น 15:42)
+                if (val.includes('T') && val.endsWith('Z')) {
+                    const dateObj = new Date(val);
+                    if (!isNaN(dateObj.getTime())) {
+                        const h = String(dateObj.getHours()).padStart(2, '0');
+                        const m = String(dateObj.getMinutes()).padStart(2, '0');
+                        return `${h}:${m}`;
+                    }
+                }
+
+                // กรณีที่ 2: ข้อมูลส่งมาเป็นข้อความตรงๆ (Local format) ให้ตัดเอาตัวเลขเวลามาโชว์เลย
+                const match = val.match(/(\d{1,2}):(\d{2})/);
+                if (match) {
+                    return `${match[1].padStart(2, '0')}:${match[2]}`;
+                }
+                
+                return "--:--";
             };
 
-            // --- ฟังก์ชันค้นหาลิงก์รูปภาพ (รองรับทั้ง "ลิงค์" และ "ลิงก์") ---
-            const getImageLink = (item) => {
-                return item["ลิงค์รูปภาพ"] || item["ลิงก์รูปภาพ"] || "";
+            // --- 2. ฟังก์ชันแปลงวันที่ให้แสดงผลแบบภาษาไทยในหน้าประวัติ ---
+            const formatThaiDisplayDate = (item) => {
+                const dKey = Object.keys(item).find(k => k.includes('วันที่บันทึก') || k.includes('Timestamp'));
+                if (!dKey || !item[dKey]) return "";
+                
+                const val = String(item[dKey]);
+
+                // ถ้าเป็น UTC format ให้แปลงเป็นเวลาไทย
+                if (val.includes('T') && val.endsWith('Z')) {
+                    const d = new Date(val);
+                    if (!isNaN(d.getTime())) {
+                        return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear() + 543}`;
+                    }
+                }
+                
+                const datePart = val.split(/[ T]/)[0];
+                const parts = datePart.split(/[-\/]/);
+                
+                if (parts.length === 3) {
+                    if (parseInt(parts[0]) > 2500) return `${parseInt(parts[2])}/${parseInt(parts[1])}/${parts[0]}`;
+                    if (parseInt(parts[2]) > 2500) return `${parseInt(parts[0])}/${parseInt(parts[1])}/${parts[2]}`;
+                    if (parts[0].length === 4) return `${parseInt(parts[2])}/${parseInt(parts[1])}/${parseInt(parts[0]) + 543}`;
+                    if (parts[2].length === 4) return `${parseInt(parts[1])}/${parseInt(parts[0])}/${parseInt(parts[2]) + 543}`;
+                }
+                return datePart;
             };
 
-            // --- ฟังก์ชันดึงวันที่ปัจจุบัน (YYYY-MM-DD) ---
-            const getTodayDate = () => {
+            // --- 3. ดึงวันที่ปัจจุบัน (ISO Format: YYYY-MM-DD) สำหรับตัวกรอง ---
+            const getTodayISO = () => {
                 const now = new Date();
-                const year = now.getFullYear();
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
+                const y = now.getFullYear();
+                const m = String(now.getMonth() + 1).padStart(2, '0');
+                const d = String(now.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
             };
 
             const [currentView, setCurrentView] = useState('homeView');
@@ -64,7 +105,7 @@
             const [historyData, setHistoryData] = useState([]);
             
             const [filterName, setFilterName] = useState('');
-            const [filterDate, setFilterDate] = useState(getTodayDate());
+            const [filterDate, setFilterDate] = useState(getTodayISO());
 
             const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz6pxzMrB8kYpLtdyJlnMmw4Hegf3KhhGMLL-ataT4JfMZiYvGXYD37eQj9qhMWZjShTQ/exec";
             
@@ -75,42 +116,58 @@
             ];
 
             useEffect(() => { fetchHistory(); }, []);
+            
             useEffect(() => {
                 if (currentView === 'homeView') fetchHistory();
                 if (currentView === 'formView') fetchLocation();
             }, [currentView]);
 
-            // ระบบตรวจสอบวันที่
-            const dateMatches = (dateInSheet, filterDateStr) => {
-                if (!dateInSheet || !filterDateStr) return false;
-                const dStr = String(dateInSheet);
-                // ตรวจสอบทั้งรูปแบบ YYYY-MM-DD และ M/D/YYYY
-                if (dStr.startsWith(filterDateStr)) return true;
-                const [y, m, d] = filterDateStr.split('-');
-                const americanFormat = `${parseInt(m)}/${parseInt(d)}/${y}`;
-                return dStr.startsWith(americanFormat);
-            };
-
-            // คำนวณสถานะหน้าหลัก
-            const stats = useMemo(() => {
-                const today = getTodayDate();
-                const todayItems = historyData.filter(i => dateMatches(i["วันที่บันทึก"], today));
+            // ระบบตรวจสอบวันที่ให้ตรงกับข้อมูลใน Sheet แบบยืดหยุ่นและรองรับ UTC
+            const checkDateMatch = (item, targetDateStr) => {
+                const dKey = Object.keys(item).find(k => k.includes('วันที่บันทึก') || k.includes('Timestamp'));
+                if (!dKey || !item[dKey]) return false;
                 
-                let lastTime = "--:--";
-                if (historyData.length > 0) {
-                    lastTime = formatTimeLocal(historyData[0]["วันที่บันทึก"]);
+                const val = String(item[dKey]);
+
+                // ถ้าเป็น UTC string ให้แปลงเป็น Local timezone แล้วเทียบ
+                if (val.includes('T') && val.endsWith('Z')) {
+                    const d = new Date(val);
+                    if (!isNaN(d.getTime())) {
+                        const localIso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                        return localIso === targetDateStr;
+                    }
                 }
                 
+                const [y, m, d] = targetDateStr.split('-');
+                const mInt = parseInt(m);
+                const dInt = parseInt(d);
+                
+                const formats = [
+                    targetDateStr,
+                    `${mInt}/${dInt}/${y}`,
+                    `${dInt}/${mInt}/${parseInt(y) + 543}`
+                ];
+
+                return formats.some(f => val.includes(f));
+            };
+
+            const stats = useMemo(() => {
+                const today = getTodayISO();
+                const todayItems = historyData.filter(i => checkDateMatch(i, today));
+                let lastTime = "--:--";
+                if (historyData.length > 0) {
+                    lastTime = getValidTime(historyData[0]);
+                }
                 return { count: todayItems.length, time: lastTime };
             }, [historyData]);
 
-            // ระบบกรองประวัติ
             const filteredHistory = useMemo(() => {
                 if (!Array.isArray(historyData)) return [];
                 return historyData.filter(item => {
-                    const nameInSheet = item["ชื่อพนักงานขาย"] || "";
+                    const nKey = Object.keys(item).find(k => k.includes('พนักงาน')) || "ชื่อพนักงานขาย";
+                    const nameInSheet = String(item[nKey] || "");
                     const matchName = filterName === '' || nameInSheet.includes(filterName) || filterName.includes(nameInSheet);
-                    const matchDate = filterDate === '' || dateMatches(item["วันที่บันทึก"], filterDate);
+                    const matchDate = filterDate === '' || checkDateMatch(item, filterDate);
                     return matchName && matchDate;
                 });
             }, [historyData, filterName, filterDate]);
@@ -126,11 +183,11 @@
             };
 
             const fetchLocation = () => {
-                setLocation('กำลังดึง GPS...');
+                setLocation('กำลังดึงพิกัด GPS...');
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (pos) => setLocation(`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`),
-                        () => setLocation("โปรดอนุญาต GPS"),
+                        () => setLocation("โปรดอนุญาตตำแหน่ง"),
                         { enableHighAccuracy: true, timeout: 5000 }
                     );
                 }
@@ -163,34 +220,42 @@
                     const res = await fetch(WEB_APP_URL, { method: 'POST', body: JSON.stringify(payload) });
                     const result = await res.json();
                     if (result.result === 'success') {
-                        setStatus({ msg: 'เช็คอินสำเร็จ!', type: 'success' });
+                        setStatus({ msg: 'บันทึกสำเร็จ!', type: 'success' });
                         e.target.reset(); setImagePreview(null);
+                        await fetchHistory();
                         setTimeout(() => { setCurrentView('homeView'); setStatus({msg:'', type:''}); }, 2000);
                     }
                 } catch (err) { setStatus({ msg: 'บันทึกล้มเหลว!', type: 'error' }); }
                 finally { setLoading(false); }
             };
 
+            const findImageLink = (item) => {
+                const key = Object.keys(item).find(k => k.includes('รูปภาพ') || k.includes('รูป'));
+                const val = key ? String(item[key]).trim() : "";
+                return (val.startsWith('http')) ? val : null;
+            };
+
             return (
                 <div className="max-w-md mx-auto min-h-screen pb-28 relative overflow-hidden bg-[#FAF9F6]">
-                    <header className="bg-[#FFC107] p-5 shadow-md sticky top-0 z-30 rounded-b-[2rem] border-b border-yellow-500 flex items-center justify-between">
+                    <header className="bg-[#FFC107] p-5 shadow-md sticky top-0 z-30 rounded-b-[2rem] border-b border-yellow-500 flex items-center justify-between text-black">
                         <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-black/50 leading-none">Super Coconut</p>
-                            <h1 className="text-xl font-bold text-black leading-tight">Sale Pro Connect</h1>
+                            <p className="text-[10px] font-bold uppercase tracking-widest opacity-60 leading-none">Super Coconut</p>
+                            <h1 className="text-xl font-bold leading-tight">Sale Pro Connect</h1>
                         </div>
-                        <div className="bg-white/40 py-1.5 px-3 rounded-full border border-black/5 text-[10px] font-bold text-black">Super Coconut.co.Ltd</div>
+                        <div className="bg-white/40 py-1.5 px-3 rounded-full border border-black/5 text-[10px] font-bold">
+                            Super Coconut.co.Ltd
+                        </div>
                     </header>
 
                     <main className="p-4">
-                        {/* หน้าหลัก */}
                         {currentView === 'homeView' && (
                             <div className="space-y-6 animate-in">
                                 <div className="bg-gradient-to-br from-[#FFC107] to-[#FF9800] p-7 rounded-[2rem] text-black shadow-xl relative overflow-hidden">
                                     <div className="relative z-10">
-                                        <h2 className="text-2xl font-bold mb-1 italic">สวัสดีครับ!</h2>
-                                        <p className="text-black/70 text-sm mb-4">วันนี้มีงานเช็คอินกี่รายการแล้ว?</p>
+                                        <h2 className="text-2xl font-bold mb-1 italic text-white">สวัสดีครับ!</h2>
+                                        <p className="text-white/80 text-sm mb-4">รายงานเช็คอินงานได้ที่นี่</p>
                                         <button onClick={() => setCurrentView('formView')} className="bg-black text-white px-8 py-3 rounded-2xl font-bold shadow-lg flex items-center gap-2 active:scale-95 transition-all">
-                                            <Icon name="map-pin" className="w-4 h-4 text-[#FFC107]" /> เริ่มเช็คอิน
+                                            <Icon name="map-pin" className="w-4 h-4 text-[#FFC107]" /> เริ่มเช็คอินงาน
                                         </button>
                                     </div>
                                     <Icon name="sun" className="absolute -right-6 -bottom-6 w-36 h-36 opacity-10" />
@@ -209,62 +274,77 @@
                                     </div>
                                 </div>
 
-                                <div className="space-y-3">
+                                <div className="space-y-3 pt-2">
                                     <h3 className="text-stone-400 font-bold px-2 text-[10px] uppercase tracking-widest">เมนูหลัก</h3>
-                                    <button onClick={() => setCurrentView('formView')} className="w-full flex items-center gap-4 bg-white p-5 rounded-[1.5rem] shadow-sm active:bg-stone-50 text-left">
-                                        <div className="bg-yellow-100 p-3 rounded-2xl text-yellow-700"><Icon name="file-text" /></div>
+                                    <button onClick={() => setCurrentView('formView')} className="w-full flex items-center gap-4 bg-white p-5 rounded-[1.5rem] shadow-sm active:bg-stone-50 text-left transition-all">
+                                        <div className="bg-yellow-400/20 p-3 rounded-2xl text-yellow-700"><Icon name="file-text" className="w-6 h-6" /></div>
                                         <div className="flex-1"><p className="font-bold text-sm">ส่งรายงานใหม่</p></div>
-                                        <Icon name="chevron-right" className="text-stone-300" />
+                                        <Icon name="chevron-right" className="text-stone-300 w-5 h-5" />
                                     </button>
-                                    <button onClick={() => setCurrentView('historyView')} className="w-full flex items-center gap-4 bg-white p-5 rounded-[1.5rem] shadow-sm active:bg-stone-50 text-left">
-                                        <div className="bg-stone-900 text-white p-3 rounded-2xl"><Icon name="refresh-cw" /></div>
+                                    <button onClick={() => setCurrentView('historyView')} className="w-full flex items-center gap-4 bg-white p-5 rounded-[1.5rem] shadow-sm active:bg-stone-50 text-left transition-all">
+                                        <div className="bg-stone-900 text-white p-3 rounded-2xl"><Icon name="refresh-cw" className="w-6 h-6" /></div>
                                         <div className="flex-1"><p className="font-bold text-sm">ดูประวัติงาน</p></div>
-                                        <Icon name="chevron-right" className="text-stone-300" />
+                                        <Icon name="chevron-right" className="text-stone-300 w-5 h-5" />
                                     </button>
                                 </div>
                             </div>
                         )}
 
-                        {/* หน้าประวัติ */}
                         {currentView === 'historyView' && (
                             <div className="space-y-4 animate-in">
-                                <button onClick={() => setCurrentView('homeView')} className="p-2.5 bg-white rounded-2xl shadow-sm mb-2"><Icon name="arrow-left" className="text-stone-600" /></button>
-                                <div className="bg-white p-5 rounded-[2rem] shadow-sm space-y-4">
+                                <div className="flex items-center gap-3 mb-2 px-1">
+                                    <button onClick={() => setCurrentView('homeView')} className="p-2.5 bg-white rounded-2xl shadow-sm"><Icon name="arrow-left" className="text-stone-600 w-5 h-5" /></button>
+                                    <h2 className="text-lg font-bold">ประวัติงาน</h2>
+                                </div>
+                                <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-stone-100 space-y-4">
                                     <div className="grid grid-cols-2 gap-3">
-                                        <select value={filterName} onChange={(e) => setFilterName(e.target.value)} className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs outline-none">
-                                            <option value="">ทั้งหมด</option>
+                                        <select value={filterName} onChange={(e) => setFilterName(e.target.value)} className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-[#FFC107]">
+                                            <option value="">ทุกคน</option>
                                             {saleNames.map(n => <option key={n} value={n}>{n}</option>)}
                                         </select>
-                                        <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs outline-none" />
+                                        <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-[#FFC107]" />
                                     </div>
-                                    <button onClick={fetchHistory} className="w-full py-3 bg-[#FFC107] font-black rounded-2xl text-[12px] uppercase shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all">
-                                        {historyLoading ? <Icon name="refresh-cw" className="w-4 h-4 animate-spin" /> : <Icon name="check" className="w-4 h-4" />} ยืนยันการดึงข้อมูล
+                                    <button onClick={fetchHistory} className="w-full py-3 bg-[#FFC107] text-black font-black rounded-2xl text-[12px] uppercase shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all">
+                                        {historyLoading ? <Icon name="refresh-cw" className="w-4 h-4 animate-spin" /> : <Icon name="check" className="w-4 h-4" />} ดึงข้อมูลล่าสุด
                                     </button>
-                                    <button onClick={() => { setFilterName(''); setFilterDate(getTodayDate()); }} className="w-full py-2 bg-stone-100 text-stone-500 rounded-2xl text-[10px] font-bold">รีเซ็ต</button>
+                                    <button onClick={() => { setFilterName(''); setFilterDate(getTodayISO()); }} className="w-full py-2 bg-stone-100 text-stone-500 rounded-2xl text-[10px] font-bold">รีเซ็ต</button>
                                 </div>
+
                                 <div className="space-y-4 px-1 pb-10 text-xs">
                                     <p className="text-[10px] font-bold text-stone-400 uppercase tracking-tighter">พบรายการ {filteredHistory.length} รายการ</p>
                                     {historyLoading ? (
                                         <div className="text-center py-20"><Icon name="refresh-cw" className="w-10 h-10 text-yellow-500 mx-auto mb-3 animate-spin" /></div>
                                     ) : filteredHistory.map((item, idx) => {
-                                        const imgLink = getImageLink(item);
+                                        const img = findImageLink(item);
+                                        const time = getValidTime(item);
+                                        const nKey = Object.keys(item).find(k => k.includes('พนักงาน')) || "ชื่อพนักงานขาย";
+                                        const sKey = Object.keys(item).find(k => k.includes('ร้านค้า')) || "ชื่อร้านค้า";
+                                        const gKey = Object.keys(item).find(k => k.includes('พิกัด')) || "พิกัด GPS";
+
                                         return (
                                             <div key={idx} className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-stone-100 flex flex-col gap-4">
                                                 <div className="flex justify-between items-start">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 bg-yellow-100 text-yellow-700 rounded-2xl flex items-center justify-center font-black text-lg shadow-inner">{item["ชื่อพนักงานขาย"]?.substring(0, 1)}</div>
-                                                        <div><p className="text-sm font-bold text-stone-900 leading-tight">{item["ชื่อร้านค้า"]}</p><p className="text-[10px] text-stone-400 font-medium">{item["ชื่อพนักงานขาย"]}</p></div>
+                                                        <div className="w-10 h-10 bg-yellow-100 text-yellow-700 rounded-2xl flex items-center justify-center font-black text-lg shadow-inner">{String(item[nKey] || "?").substring(0, 1)}</div>
+                                                        <div>
+                                                            <p className="text-sm font-bold text-stone-900 leading-tight">{item[sKey] || "ไม่ระบุร้าน"}</p>
+                                                            <p className="text-[10px] text-stone-400 font-medium">{item[nKey]}</p>
+                                                        </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <p className="text-xs font-black text-yellow-600">{formatTimeLocal(item["วันที่บันทึก"])} น.</p>
-                                                        <p className="text-[9px] text-stone-300 uppercase tracking-tighter">{String(item["วันที่บันทึก"] || '').split(' ')[0]}</p>
+                                                        <p className="text-xs font-black text-yellow-600">{time} น.</p>
+                                                        <p className="text-[9px] text-stone-300 uppercase tracking-tighter">{formatThaiDisplayDate(item)}</p>
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-2">
-                                                    {imgLink && imgLink.startsWith('http') && (
-                                                        <a href={imgLink} target="_blank" rel="noreferrer" className="flex-1 py-3 bg-blue-50 text-blue-700 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:bg-blue-100 transition-all"><Icon name="file-text" className="w-3.5 h-3.5" /> ดูรูปถ่าย</a>
+                                                    {img && (
+                                                        <a href={img} target="_blank" rel="noreferrer" className="flex-1 py-3 bg-blue-50 text-blue-700 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:bg-blue-100 shadow-sm transition-all">
+                                                            <Icon name="file-text" className="w-3.5 h-3.5" /> ดูรูปถ่าย
+                                                        </a>
                                                     )}
-                                                    <a href={`https://www.google.com/maps/search/?api=1&query=${item["พิกัด GPS"]}`} target="_blank" rel="noreferrer" className="flex-1 py-3 bg-green-50 text-green-700 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:bg-green-100 transition-all"><Icon name="map-pin" className="w-3.5 h-3.5" /> แผนที่</a>
+                                                    <a href={`https://www.google.com/maps/search/?api=1&query=${item[gKey]}`} target="_blank" rel="noreferrer" className="flex-1 py-3 bg-green-50 text-green-700 rounded-2xl text-[10px] font-bold flex items-center justify-center gap-2 active:bg-green-100 shadow-sm transition-all">
+                                                        <Icon name="map-pin" className="w-3.5 h-3.5" /> แผนที่
+                                                    </a>
                                                 </div>
                                             </div>
                                         );
@@ -273,22 +353,21 @@
                             </div>
                         )}
 
-                        {/* หน้าเช็คอิน (หน้าเดิม) */}
                         {currentView === 'formView' && (
                             <div className="space-y-4 animate-in">
-                                <button onClick={() => setCurrentView('homeView')} className="p-2.5 bg-white rounded-2xl shadow-sm mb-2"><Icon name="arrow-left" className="text-stone-600" /></button>
-                                <form onSubmit={handleSubmit} className="bg-white p-6 rounded-[2rem] shadow-sm space-y-6">
-                                    <select name="saleName" required defaultValue="" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none">
-                                        <option value="" disabled>เลือกชื่อของคุณ</option>
+                                <button onClick={() => setCurrentView('homeView')} className="p-2.5 bg-white rounded-2xl shadow-sm mb-2 active:scale-90 transition-all"><Icon name="arrow-left" className="text-stone-600 w-5 h-5" /></button>
+                                <form onSubmit={handleSubmit} className="bg-white p-6 rounded-[2rem] shadow-sm border border-stone-100 space-y-6">
+                                    <select name="saleName" required defaultValue="" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none focus:ring-2 focus:ring-[#FFC107] appearance-none text-sm font-medium">
+                                        <option value="" disabled>เลือกชื่อพนักงาน</option>
                                         {saleNames.map(n => <option key={n} value={n}>{n}</option>)}
                                     </select>
-                                    <input type="text" name="shopName" required placeholder="ชื่อร้านค้า" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none" />
+                                    <input type="text" name="shopName" required placeholder="ระบุชื่อร้านค้า" className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none focus:ring-2 focus:ring-[#FFC107] text-sm" />
                                     <div className="bg-yellow-50 p-5 rounded-2xl border border-yellow-100 flex justify-between items-center">
                                         <div>
-                                            <p className="text-[10px] font-bold text-yellow-800 uppercase tracking-widest mb-1">📍 พิกัด GPS</p>
+                                            <p className="text-[10px] font-bold text-yellow-800 uppercase tracking-widest mb-1 italic">📍 My Location</p>
                                             <p className="text-xs font-mono font-bold text-yellow-900 break-all">{location}</p>
                                         </div>
-                                        <button type="button" onClick={fetchLocation} className="bg-yellow-200 hover:bg-yellow-300 text-yellow-800 text-[9px] font-bold px-2 py-1.5 rounded-full flex items-center gap-1"><Icon name="refresh-cw" className="w-3 h-3" /> อัปเดต</button>
+                                        <button type="button" onClick={fetchLocation} className="bg-yellow-200 hover:bg-yellow-300 text-yellow-800 text-[9px] font-black px-2.5 py-1.5 rounded-full transition-all flex items-center gap-1 shadow-sm"><Icon name="refresh-cw" className="w-3 h-3" /> รีเฟรช</button>
                                     </div>
                                     <div className="space-y-3">
                                         {imagePreview ? (
@@ -297,14 +376,14 @@
                                                 <button type="button" onClick={() => setImagePreview(null)} className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full">✕</button>
                                             </div>
                                         ) : (
-                                            <button type="button" onClick={() => document.getElementById('cam').click()} className="w-full py-12 border-2 border-dashed border-stone-200 rounded-[2rem] text-stone-400 bg-stone-50/50 flex flex-col items-center gap-2 active:bg-stone-50">
-                                                <Icon name="camera" className="opacity-40" /><span className="text-xs font-bold uppercase tracking-wider">ถ่ายรูปหน้าร้าน</span>
+                                            <button type="button" onClick={() => document.getElementById('cam-input').click()} className="w-full py-12 border-2 border-dashed border-stone-200 rounded-[2rem] text-stone-400 bg-stone-50/50 flex flex-col items-center gap-2 active:bg-stone-50">
+                                                <Icon name="camera" className="w-8 h-8 opacity-40" /><span className="text-xs font-bold uppercase tracking-wider">กดถ่ายรูปหน้าร้าน</span>
                                             </button>
                                         )}
-                                        <input id="cam" type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                                        <input id="cam-input" type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
                                     </div>
-                                    <button type="submit" disabled={loading} className="w-full bg-[#FFC107] text-black font-bold py-5 rounded-[2rem] shadow-xl active:scale-95 transition-all">
-                                        {loading ? '⌛ กำลังบันทึก...' : '🚀 ส่งรายงาน'}
+                                    <button type="submit" disabled={loading} className="w-full bg-[#FFC107] text-black font-black py-5 rounded-[2rem] shadow-xl active:scale-95 transition-all text-sm tracking-widest uppercase">
+                                        {loading ? '⌛ กำลังส่งข้อมูล...' : '🚀 ยืนยันการเช็คอิน'}
                                     </button>
                                     {status.msg && <div className={`p-4 rounded-2xl text-center text-xs font-bold ${status.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{status.msg}</div>}
                                 </form>
@@ -312,10 +391,10 @@
                         )}
                     </main>
 
-                    <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-white/90 backdrop-blur-xl border border-white/50 p-4 rounded-[2.5rem] shadow-2xl z-40 flex justify-around items-center">
-                        <button onClick={() => setCurrentView('homeView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'homeView' ? 'text-yellow-600 scale-110' : 'text-stone-300'}`}><Icon name="home" /><span className="text-[9px] font-bold uppercase tracking-widest">หน้าหลัก</span></button>
-                        <button onClick={() => setCurrentView('formView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'formView' ? 'text-yellow-600 scale-110' : 'text-stone-300'}`}><Icon name="map-pin" /><span className="text-[9px] font-bold uppercase tracking-widest">เช็คอิน</span></button>
-                        <button onClick={() => setCurrentView('historyView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'historyView' ? 'text-yellow-600 scale-110' : 'text-stone-300'}`}><Icon name="refresh-cw" /><span className="text-[9px] font-bold uppercase tracking-widest">ประวัติ</span></button>
+                    <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-md bg-white/95 backdrop-blur-xl border border-white/50 p-4 rounded-[2.5rem] shadow-2xl z-40 flex justify-around items-center text-stone-300">
+                        <button onClick={() => setCurrentView('homeView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'homeView' ? 'text-yellow-600 scale-110' : ''}`}><Icon name="home" className="w-6 h-6" /><span className="text-[9px] font-bold uppercase tracking-widest">Home</span></button>
+                        <button onClick={() => setCurrentView('formView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'formView' ? 'text-yellow-600 scale-110' : ''}`}><Icon name="map-pin" className="w-6 h-6" /><span className="text-[9px] font-bold uppercase tracking-widest">Check-in</span></button>
+                        <button onClick={() => setCurrentView('historyView')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'historyView' ? 'text-yellow-600 scale-110' : ''}`}><Icon name="refresh-cw" className="w-6 h-6" /><span className="text-[9px] font-bold uppercase tracking-widest">History</span></button>
                     </nav>
                 </div>
             );

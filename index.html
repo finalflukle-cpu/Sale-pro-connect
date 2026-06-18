@@ -7,7 +7,7 @@
     <!-- โหลด Library ที่จำเป็นจาก CDN -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -35,6 +35,7 @@
         const App = () => {
             // --- 1. ฟังก์ชันดึงเวลาที่แม่นยำด้วยการล็อค Timezone โซนประเทศไทย (Bangkok) ---
             const getValidTime = (item) => {
+                if (!item) return "--:--";
                 const dKey = Object.keys(item).find(k => k.includes('วันที่บันทึก') || k.includes('Timestamp'));
                 if (!dKey || !item[dKey]) return "--:--";
                 
@@ -68,6 +69,7 @@
 
             // --- 2. ฟังก์ชันแปลงวันที่ให้แสดงผลแบบภาษาไทยในหน้าประวัติ ---
             const formatThaiDisplayDate = (item) => {
+                if (!item) return "";
                 const dKey = Object.keys(item).find(k => k.includes('วันที่บันทึก') || k.includes('Timestamp'));
                 if (!dKey || !item[dKey]) return "";
                 
@@ -80,9 +82,10 @@
                     if (!isNaN(d.getTime())) {
                         const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: 'numeric', day: 'numeric' });
                         const parts = formatter.formatToParts(d);
-                        const day = parts.find(p => p.type === 'day').value;
-                        const month = parts.find(p => p.type === 'month').value;
-                        const year = parseInt(parts.find(p => p.type === 'year').value) + 543;
+                        const day = parts.find(p => p.type === 'day')?.value || "";
+                        const month = parts.find(p => p.type === 'month')?.value || "";
+                        const yearRaw = parts.find(p => p.type === 'year')?.value;
+                        const year = yearRaw ? parseInt(yearRaw) + 543 : "";
                         return `${day}/${month}/${year}`;
                     }
                 }
@@ -136,6 +139,7 @@
 
             // ระบบตรวจสอบวันที่ให้ตรงกับข้อมูลใน Sheet ด้วยการล็อค Timezone เป็นประเทศไทย
             const checkDateMatch = (item, targetDateStr) => {
+                if (!item) return false;
                 const dKey = Object.keys(item).find(k => k.includes('วันที่บันทึก') || k.includes('Timestamp'));
                 if (!dKey || !item[dKey]) return false;
                 
@@ -148,14 +152,17 @@
                     if (!isNaN(d.getTime())) {
                         const formatter = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' });
                         const parts = formatter.formatToParts(d);
-                        const y = parts.find(p => p.type === 'year').value;
-                        const m = parts.find(p => p.type === 'month').value;
-                        const day = parts.find(p => p.type === 'day').value;
-                        const localIso = `${y}-${m}-${day}`;
-                        return localIso === targetDateStr;
+                        const y = parts.find(p => p.type === 'year')?.value;
+                        const m = parts.find(p => p.type === 'month')?.value;
+                        const day = parts.find(p => p.type === 'day')?.value;
+                        if (y && m && day) {
+                            const localIso = `${y}-${m}-${day}`;
+                            return localIso === targetDateStr;
+                        }
                     }
                 }
                 
+                if (!targetDateStr) return false;
                 const [y, m, d] = targetDateStr.split('-');
                 const mInt = parseInt(m);
                 const dInt = parseInt(d);
@@ -173,7 +180,7 @@
                 const today = getTodayISO();
                 const todayItems = historyData.filter(i => checkDateMatch(i, today));
                 let lastTime = "--:--";
-                if (historyData.length > 0) {
+                if (historyData.length > 0 && historyData[0]) {
                     lastTime = getValidTime(historyData[0]);
                 }
                 return { count: todayItems.length, time: lastTime };
@@ -182,6 +189,7 @@
             const filteredHistory = useMemo(() => {
                 if (!Array.isArray(historyData)) return [];
                 return historyData.filter(item => {
+                    if (!item) return false;
                     const nKey = Object.keys(item).find(k => k.includes('พนักงาน')) || "ชื่อพนักงานขาย";
                     const nameInSheet = String(item[nKey] || "");
                     const matchName = filterName === '' || nameInSheet.includes(filterName) || filterName.includes(nameInSheet);
@@ -196,7 +204,10 @@
                     const response = await fetch(WEB_APP_URL);
                     const data = await response.json();
                     setHistoryData(Array.isArray(data) ? data : []);
-                } catch (err) { console.error(err); }
+                } catch (err) { 
+                    console.error("Fetch Error:", err);
+                    setHistoryData([]); 
+                }
                 finally { setHistoryLoading(false); }
             };
 
@@ -242,12 +253,18 @@
                         e.target.reset(); setImagePreview(null);
                         await fetchHistory();
                         setTimeout(() => { setCurrentView('homeView'); setStatus({msg:'', type:''}); }, 2000);
+                    } else {
+                        setStatus({ msg: 'บันทึกล้มเหลว!', type: 'error' });
                     }
-                } catch (err) { setStatus({ msg: 'บันทึกล้มเหลว!', type: 'error' }); }
+                } catch (err) { 
+                    console.error("Submit Error:", err);
+                    setStatus({ msg: 'บันทึกล้มเหลว!', type: 'error' }); 
+                }
                 finally { setLoading(false); }
             };
 
             const findImageLink = (item) => {
+                if (!item) return null;
                 const key = Object.keys(item).find(k => k.includes('รูปภาพ') || k.includes('รูป'));
                 const val = key ? String(item[key]).trim() : "";
                 return (val.startsWith('http')) ? val : null;
